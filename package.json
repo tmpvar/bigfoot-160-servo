@@ -1,0 +1,8 @@
+{
+  "scripts" : {
+    "term" : "serialportterm -p /dev/tty.usbmodemfd121 --baud=115200"
+  },
+  "dependencies": {
+    "serialport": "^1.4.6"
+  }
+}
