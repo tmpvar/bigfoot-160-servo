@@ -1,6 +1,3 @@
-// #include <Servo.h>
-// Servo myservo;
-
 int v = 0;
 int dir = 1;
 uint8_t a, b, la, lb;
@@ -20,37 +17,20 @@ long position = 0, targetPosition = 0;
 uint8_t spots[4] = {0, 1, 3, 2};
 uint8_t spot = 0;
 
+int motor_speed = 0;
+uint8_t motor_max_speed = 500;
 
-void idle() {
-  analogWrite(5, 0);
-  analogWrite(6, 0);
-  digitalWrite(13, HIGH);
-}
+int main() {
+  //myservo.attach(9);
+  // Serial.begin(115200);
 
-void exit_idle() {
-  digitalWrite(13, LOW);
-}
+  TCCR1A |= (1<<COM1A1) | (1<<WGM11); // non-inverting mode for OC1A
+  TCCR1B |= (1<<WGM13) | (1<<WGM12) | (1<<CS11); // Mode 14, Prescaler 8
 
-void fwd(uint8_t speed) {
-  analogWrite(5, speed);
-  analogWrite(6, 0);
-  exit_idle();
-}
-
-void rev(uint8_t speed) {
-  analogWrite(6, speed);
-  analogWrite(5, 0);
-  exit_idle();
-}
-
-void setup()
-{
-  // myservo.attach(9);
-  Serial.begin(115200);
-
-  pinMode(5, OUTPUT);
-  pinMode(6, OUTPUT);
-  pinMode(13, OUTPUT);
+  ICR1 = 40000; // 320000 / 8 = 40000
+  sei();
+  DDRB |= (1<<1) | (1<<5);
+  DDRD |= (1<<5) | (1<<6);
 
   DDRD &= 0xFF ^ (a_mask | b_mask);
 
@@ -64,35 +44,51 @@ void setup()
     }
   }
 
-  idle();
-}
+  uint8_t p, n;
+  long diff;
 
+  OCR1A = 3000;
+  while(1) {
+    val = (PIND & (a_mask | b_mask)) >> 2;
+    p = spot > 0 ? spot-1 : 3;
+    n = spot < 3 ? spot+1 : 0;
 
-void loop() {
-  uint8_t val = ((PIND & a_mask) | (PIND & b_mask)) >> 2;
-  uint8_t p = spot > 0 ? spot-1 : 3;
-  uint8_t n = spot < 3 ? spot+1 : 0;
+    if (val == spots[p]) {
+      spot = p;
+      position--;
+    } else if (val == spots[n]) {
+      spot = n;
+      position++;
+    }
 
-  unsigned long now = millis();
+    diff = position - targetPosition;
 
-  if (val == spots[p]) {
-    time = now;
-    spot = p;
-    position--;
-  } else if (val == spots[n]) {
-    spot = n;
-    position++;
-    time = now;
-  } else if (now - time > 1000) {
-    Serial.println(position);
-    time = millis();
+    if (abs(diff) % 1024 < 5) {
+      PORTD |= (1<<5);
+    } else {
+      PORTD &= 0xFF ^ (1<<5);
+    }
+
+    if (abs(diff) < 5) {
+      PORTB |= (1<<5);
+      motor_speed = 0;
+    } else {
+      PORTB &= 0xFF ^ (1<<5);
+
+      if (diff < 0) {
+        motor_speed++;
+        if (motor_speed > motor_max_speed) {
+          motor_speed = motor_max_speed;
+        }
+      } else {
+        motor_speed--;
+        if (motor_speed < -motor_max_speed) {
+          motor_speed = -motor_max_speed;
+        }
+      }
+    }
+    OCR1A = 3000 + motor_speed;
   }
 
-  if (position < targetPosition) {
-    rev(127);
-  } else if (position > targetPosition) {
-    fwd(127);
-  } else {
-    idle();
-  }
+  return 1;
 }
